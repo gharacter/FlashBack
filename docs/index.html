@@ -100,11 +100,41 @@ var Swf = (function(){
 			var transparent = document.querySelector("input[name=transparent]").checked;
 			var FlashVars = document.querySelector("textarea[name=FlashVars]").value;
 			try{ FlashVars = JSON.parse(FlashVars); }catch(e){ FlashVars = {} }
+			var intWidth = width.replace(/[^0-9\.]/g, '');
+			var intHeight = height.replace(/[^0-9\.]/g, '');
+
+			// 複数表示を有効で実行後に無効で実行した場合クリアする
+			if(isPlural && !plural) this.clear();
+			isPlural = plural;
+			id++; // clearで初期化(0)されるのでインクリメントはここで行う
+
+			//var old = _$("swf2js_"+ oldId); // 作るたびにカウントアップされる
+			var old = _$("swf_"+ oldId); // 入れ物に入れてく場合
+			if(!plural && old) old.style.display = "none"; // 非表示にして置き、ロード完了後に消す
+			_$(disp).insertAdjacentHTML('beforeend', '<div class="swf" id="'+ tagId +'"></div>'); // 入れ物に入れてく
+
+			if(intWidth && width.indexOf("%") !== -1){
+				_$(tagId).style.width = intWidth + "%";
+				intWidth = 0;
+			}else if(intWidth){
+				_$(tagId).style.width = intWidth + "px";
+			}else{
+				_$(tagId).style.width = plural ? "240px" : "100%";
+			}
+
+			if(intHeight && height.indexOf("%") !== -1){
+				_$(tagId).style.height = (_$("mdl").offsetHeight * intHeight / 100) + "px";
+				intHeight = 0;
+			}else if(intHeight){
+				_$(tagId).style.height = intHeight + "px";
+			}else{
+				_$(tagId).style.height = plural ? "320px" : (_$("mdl").offsetHeight) + "px";
+			}
 
 			var opt = {
 				tagId: tagId, //string 読み込み先のタグのID
-				width: Number(width), //int 横幅(px)
-				height: Number(height), //int 高さ(px)
+				width: intWidth, //int 横幅(px)
+				height: intHeight, //int 高さ(px)
 				quality: quality, //描画レベル(low, medium, high) 初期値は(medium)
 				bgcolor: transparent ? "transparent" : bgcolor, //string 背景色の設定
 				FlashVars: FlashVars, //object 変数
@@ -119,34 +149,6 @@ var Swf = (function(){
 					//var mc = _root.getMovieClip("targetMc");
 					//mc.gotoAndStop();
 				}
-			}
-
-			// 複数表示を有効で実行後に無効で実行した場合クリアする
-			if(isPlural && !plural) this.clear();
-			isPlural = plural;
-			id++; // clearで初期化(0)されるのでインクリメントはここで行う
-
-			//var old = _$("swf2js_"+ oldId); // 作るたびにカウントアップされる
-			var old = _$("swf_"+ oldId); // 入れ物に入れてく場合
-			if(!plural && old) old.style.display = "none"; // 非表示にして置き、ロード完了後に消す
-			_$(disp).insertAdjacentHTML('beforeend', '<div class="swf" id="'+ tagId +'"></div>'); // 入れ物に入れてく
-
-			if(Number(width) && width.indexOf("%") != -1){
-				_$(tagId).style.width = Number(width) + "%";
-				width = 0;
-			}else if(Number(width)){
-				_$(tagId).style.width = Number(width) + "px";
-			}else{
-				_$(tagId).style.width = plural ? "240px" : "100%";
-			}
-
-			if(Number(height) && height.indexOf("%") != -1){
-				_$(tagId).style.height = (_$("mdl").offsetHeight * Number(height) / 100) + "px";
-				height = 0;
-			}else if(Number(height)){
-				_$(tagId).style.height = Number(height) + "px";
-			}else{
-				_$(tagId).style.height = plural ? "320px" : (_$("mdl").offsetHeight) + "px";
 			}
 
 			Page.load(disp == "disp1" ? 1 : 0);
