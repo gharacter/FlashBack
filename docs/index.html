@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Cache-Control" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta http-equiv="content-language" content="ja">
+
+<meta property="og:url" content="https://gharacter.github.io/FlashBack/" />
+<meta property="og:image" content="https://gharacter.github.io/FlashBack/res/title.png" />
+<meta property="og:title" content="FlashBack" />
+<meta property="og:description" content="手持ちのFlashファイルをドラッグ＆ドロップで再生できます" />
+<meta property="og:type" content="article">
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:site" content="@gharacter" />
+
+<meta property="og:site_name" content="サイト名" />
+<meta property="og:locale" content="ja_JP" />
+<meta property="fb:app_id" content="appIDを入力">
+
+<script type="text/javascript" src="swf2js/swf2js.js"></script>
+<script>
+var DEBUG   = false;
+var UA      = window.navigator.userAgent.toLowerCase();
+var isIE    = UA.match(/msie/) || UA.match(/trident/);
+var isLocal = location.href.substring(0,5)==='file:';
+var isTouch = ('ontouchstart' in window || navigator.msPointerEnabled);
+var src     = function(s){ return "./res/" + s }
+
+//---------------------------
+// ■ ページ
+//---------------------------
+var Page = (function(){
+	var cur = -1;
+	return{
+		init: function(n){
+			var nav = document.getElementsByName("nav");
+			for(var i=0; i<nav.length; i++){
+				nav[i].addEventListener(isIE?"change":"input", function(e){
+					Page.load( Number(e.target.value) );
+				}, false);
+			}
+			this.load(n);
+		},
+		load: function(n){
+			var p = document.getElementsByClassName("page");
+			for(var i=0; i<p.length; i++){
+				p[i].style.display = (n==i) ? "block": "none";
+			}
+			document.getElementsByName("nav")[n].click();
+			cur = n;
+		},
+		getCur: function(){
+			return cur;
+		}
+	}
+})();
+//---------------------------
+// ■ swfローダー
+//---------------------------
+var Swf = (function(){
+	var id = -1;
+	var isPlural = false;
+	return{
+		init: function(){
+			 var dropped = function(file){
+				if(file && (file.type == "application/x-shockwave-flash" || file.type == "")){
+					var reader = new FileReader();
+					reader.onload = function() {
+						Swf.load(reader.result);
+					}
+					reader.readAsDataURL(file);
+				}
+			}
+			dragAndDrop(_$c(_$("top"), "dropArea")[0], _$("top"), dropped);
+			dragAndDrop(_$c(_$("mdl"), "dropArea")[0], _$("mdl"), dropped);
+		},
+		clear: function(){
+			// 裏に残る場合がある(過去に読み込んだswfの音が鳴ってる場合がある)
+			try{ swf2js.reload("", {}); }catch(e){ log(e); } // エラーするけどこれで消えるか？
+			id = 0; // 上記で初期化される（次回作成時は1からとなる(何故か初回作成時と異なる?)）
+			_$("disp1").innerHTML = "";
+			_$("disp0").innerHTML = "";
+			log("SWF_DELETE: ALL");
+		},
+		load: function(url){
+
+			var oldId = id;
+			var tagId = "swf_"+ (id + 1);
+
+			var disp = document.querySelector("input[name=disp]:checked").value;
+			var plural = document.querySelector("input[name=plural]").checked;
+			var width = document.querySelector("input[name=width]").value;
+			var height = document.querySelector("input[name=height]").value;
+			var quality = document.querySelector("input[name=quality]:checked").value;
+			var bgcolor = document.querySelector("input[name=bgcolor]").value;
+			var transparent = document.querySelector("input[name=transparent]").checked;
+			var FlashVars = document.querySelector("textarea[name=FlashVars]").value;
+			try{ FlashVars = JSON.parse(FlashVars); }catch(e){ FlashVars = {} }
+
+			var opt = {
+				tagId: tagId, //string 読み込み先のタグのID
+				width: Number(width), //int 横幅(px)
+				height: Number(height), //int 高さ(px)
+				quality: quality, //描画レベル(low, medium, high) 初期値は(medium)
+				bgcolor: transparent ? "transparent" : bgcolor, //string 背景色の設定
+				FlashVars: FlashVars, //object 変数
+				callback: function(_root){ // swfの読み込み完了後にcall
+					if(!plural && old){
+						old.parentNode.removeChild(old);
+						log("SWF_DELETE: ", oldId);
+					}
+					if(plural && !height){
+						_$(tagId).style.height = _$("swf2js_"+ (oldId+1)).offsetHeight + "px";
+					}
+					//var mc = _root.getMovieClip("targetMc");
+					//mc.gotoAndStop();
+				}
+			}
+
+			// 複数表示を有効で実行後に無効で実行した場合クリアする
+			if(isPlural && !plural) this.clear();
+			isPlural = plural;
+			id++; // clearで初期化(0)されるのでインクリメントはここで行う
+
+			//var old = _$("swf2js_"+ oldId); // 作るたびにカウントアップされる
+			var old = _$("swf_"+ oldId); // 入れ物に入れてく場合
+			if(!plural && old) old.style.display = "none"; // 非表示にして置き、ロード完了後に消す
+			_$(disp).insertAdjacentHTML('beforeend', '<div class="swf" id="'+ tagId +'"></div>'); // 入れ物に入れてく
+
+			if(Number(width) && width.indexOf("%") != -1){
+				_$(tagId).style.width = Number(width) + "%";
+				width = 0;
+			}else if(Number(width)){
+				_$(tagId).style.width = Number(width) + "px";
+			}else{
+				_$(tagId).style.width = plural ? "240px" : "100%";
+			}
+
+			if(Number(height) && height.indexOf("%") != -1){
+				_$(tagId).style.height = (_$("mdl").offsetHeight * Number(height) / 100) + "px";
+				height = 0;
+			}else if(Number(height)){
+				_$(tagId).style.height = Number(height) + "px";
+			}else{
+				_$(tagId).style.height = plural ? "320px" : (_$("mdl").offsetHeight) + "px";
+			}
+
+			Page.load(disp == "disp1" ? 1 : 0);
+
+			if(plural){
+				swf2js.load(url, opt);
+			}else{
+				//swf2js.reload(url, opt);//TypeError: Cannot read properties of undefined (reading 'getInstance')
+				swf2js.load(url, opt);
+			}
+		},
+		isPlural: function(){
+			return isPlural;
+		},
+		getId: function(){
+			return id;
+		}
+	}
+})();
+//---------------------------
+// ■ ドラッグアンドドロップ
+//---------------------------
+function dragAndDrop(elm, elmParent, callback){
+	if(!elm || !elmParent){ log("dragAndDrop初期化エラー"); return; }
+	elm.addEventListener("dragenter",function(e){e.preventDefault();},false);
+	elm.addEventListener("dragover",function(e){e.preventDefault();},false);
+	elm.addEventListener("drop",function(e){
+		if( !fileRead(e, e.dataTransfer.files) ){
+			e.preventDefault();
+			return;
+		}
+		e.preventDefault();
+	},false);
+
+	// input type="file" 側
+	if(_$c(elmParent, "inputFile")[0]){
+		_$c(elmParent, "inputFile")[0].addEventListener("change",function(e){
+			if( !fileRead(e, e.target.files) ){
+				e.preventDefault();
+				return;
+			}
+			e.preventDefault();
+		},false);
+	}else{
+		log("DnD: inputFile is not defined", elmParent);
+	}
+
+	// ファイルを得た時の共通処理
+	function fileRead(e, files){
+		if(!files || !files[0]){
+			return false;
+		}
+
+		// input type="file" にデータを渡しておく
+		if(_$c(elmParent, "inputFile")[0]){
+			_$c(elmParent, "inputFile")[0].files = files;
+		}else{
+			log("DnD: inputFile is not defined", elmParent);
+		}
+
+		if(_$c(elmParent, "inputFileData")[0]){
+			_$c(elmParent, "inputFileData")[0].innerHTML = ("<tt>\n"+"▼選択中のファイル詳細"
+			+"<br>\n"+"name: " + files[0].name
+			+"<br>\n"+"type: " + files[0].type
+			+"<br>\n"+"size: " + fmtByte(files[0].size, 2) +" ("+ files[0].size +")"
+			+"</tt>");
+		}
+
+		if(callback) callback( files[0] );
+
+		return true;
+	}
+}
+
+//---------------------------
+// ■ 初期化
+//---------------------------
+function init(){
+	Swf.init();
+	Page.init(0);
+}
+
+function resize(){
+	if(!Swf.isPlural() && Page.getCur() == 1){
+		_$("swf_"+ Swf.getId()).style.height = (_$("mdl").offsetHeight) + "px"; log(_$("mdl").offsetHeight);
+	}
+}
+
+window.onload   = function(){ init(); resize(); }
+window.unonload = function(){ }
+window.onresize = function(){ resize(); }
+window.onscroll = function(){ resize(); }
+window.requestAnimationFrame = window.requestAnimationFrame||window.mozRequestAnimationFrame||window.webkitRequestAnimationFrame||window.msRequestAnimationFrame;
+Node.prototype.prependChild = function(e){this.insertBefore(e,this.firstChild)}
+function _$(id){return document.getElementById(id);}
+function _$c(a,b){return (a&&a.tagName?a:document).getElementsByClassName(a&&a.tagName?b:a)}
+function _$t(a,b){return (a&&a.tagName?a:document).getElementsByTagName(a&&a.tagName?b:a)}
+function log(arg0, arg1){ if(arg1 == undefined){ console.log(arg0); }else{ console.log(arg0, arg1); } }
+function rand(n){return Math.floor(Math.random()*n)}
+function copy(o){return JSON.parse(JSON.stringify(o))}
+function fmt(n){var h=Math.floor(n/3600),m=('0'+Math.floor(n/60%60)).slice(-2),s=('0'+Math.floor(n%60)).slice(-2);return (n>3600)?(h+':'+m+':'+s):(m+':'+s);}
+function fmtByte(b,d){if(b==0) return "0 Byte";var k=1024,s=["Bytes","KB","MB","GB","TB","PB"],i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(d))+" "+s[i];}
+function addClass(e, addName){delClass(e,addName);if(e.className==null||e.className==undefined)e.className="";e.className+=" "+addName;return e;}
+function delClass(e, delName){if(e.className==null||e.className==undefined)return e;var a=e.className.split(" ");for(var i=0;i<a.length;i++){if(a[i]==delName)a.splice(i--,1);}e.className = a.join(" ");return e;}
+function getUrlParams(){var p={}, pair=location.search.substring(1).split('&'); for(var i=0; pair[i]; i++){var kv=pair[i].split('='); p[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||"");} return p;}
+function getUrlParamsStr(obj){var r=''; for(var p in obj){r+=(r.length==0?'?':'&')+encodeURIComponent(p)+'='+encodeURIComponent(obj[p]);} return r;}
+</script>
+<style>
+*,
+*::before,
+*::after   { margin:0; padding:0; box-sizing:border-box; }
+body, html { width:100%; height:100%; background:#333; color:#FFF; overflow:hidden hidden; }
+a     { color:#FC0; }
+a:visited { color:#C90; }
+i, em { font-style:normal; }
+b     { font-weight:normal; }
+br    { height:0px; }
+ul    { list-style:none; }
+ol    { margin-left:40px; }
+li    { padding:0.4em; }
+h2    { margin-top:1.2em; }
+input { vertical-align:middle; }
+textarea { vertical-align:top; background:#bbb; color:#000; padding:0.4em; }
+img, video, canvas { vertical-align:bottom; -ms-interpolation-mode:bicubic; }/*IEが汚い-ms-…はIE9以降無効(絶望)*/
+
+#main { width:100%; height:100%; }
+#top  { width:100%; height:44px; position:fixed; left:0px; top:0px; background:rgba(0,0,0,0.5);line-height:44px; text-align:center; z-index:2; }
+#mdl  { width:100%; height:calc(100% - 44px); position:absolute; left:0; top:44px; overflow:auto; }
+#btm  { width:100%; height:44px; position:fixed; left:0px; bottom:0px; background:rgba(0,0,0,0.0); z-index:2; overflow:hidden; pointer-events:none; }
+#btm *{ pointer-events:auto; }
+
+.nav       { cursor:pointer; margin:0 8px; }
+.nav input { display:none; }
+.nav input:checked + b { font-weight:bold; line-height:1.2em; border-bottom:2px solid #FC0; }
+
+.page      { max-width:800px; margin:auto; display:none; }
+.content   { padding:5px; }
+.image     { padding:20px; text-align:center; }
+.image img { width:50%; }
+
+#disp1     { max-width:auto; height:100%; }
+.swf       { display:inline-block; vertical-align:bottom; }
+
+.dropArea { min-height:80px; text-align:center; padding:4px 4px; border:dashed 1px #888; border-radius:8px; background:#000; overflow:hidden; }
+.dropAreaInput { display:inline-block; }
+.inputFileData { width:100%; }
+.inputFileData tt { width:100%; margin-top:5px; text-align:left; padding:10px; border-radius:8px; background:#666; color:#FFF; display:block; }
+
+.config { display:inline-block; float:right; text-align:left; white-space:nowrap; background:#222; border:solid 0px #ccc; border-radius:8px; }
+.config label { margin:5px; padding:2px 5px; background:#eee; color:#333; border:solid 1px #ccc; border-radius:20px; }
+.config input[type='text'],
+.config input[type='number'],
+.config textarea { width:100%; border-radius:3px; padding:5px 5px; }
+</style>
+<title></title>
+</head>
+<body>
+<div id="main">
+	<div id="top">
+		<label class="nav"><input type="radio" name="nav" value=0><b>概要・設定</b>
+		</label><label class="nav"><input type="radio" name="nav" value=1><b>再生</b>
+		</label>
+
+		<span class="dropArea">
+			<input type="file" class="inputFile" name="file">
+		</span>
+	</div>
+	<div id="mdl">
+		<div class="page">
+			<div class="content">
+				<h1>FlashBack</h1>
+
+				<p>
+					手持ちのFlashファイルをドラッグ＆ドロップで再生できます。<br>
+					アップロードはされず、ブラウザ上で処理されます。<br>
+				</p>
+
+
+				<h2>読込と設定</h2>
+				<div class="dropArea">
+					<div class="dropAreaInput">
+						<br>
+						このエリアにファイルをドロップするか、<br>ファイル選択ボタンでファイルを選択。<br>
+						拡張子「.swf」のファイルを読込むと<br>「再生」タブに切替わります。<br>
+						<input type="file" class="inputFile" name="file"><br>
+						<div class="inputFileData"></div>
+						<br>
+					</div>
+					<ul class="config">
+						<li>
+							表示場所
+							<label><input type="radio" name="disp" value="disp1" checked> 再生タブ </label>
+							<label><input type="radio" name="disp" value="disp0"> 現在のタブ </label>
+						</li>
+						<li>
+							複数表示
+							<label><input type="checkbox" name="plural" value="1"> 有効 </label>
+							<button type="button" onclick="Swf.clear()"> 全消去 </button>
+						</li>
+						<li>
+							描画レベル
+							<label><input type="radio" name="quality" value="low"> low </label>
+							<label><input type="radio" name="quality" value="medium" checked> medium </label>
+							<label><input type="radio" name="quality" value="high"> high </label>
+						</li>
+						<li>
+							横幅(px) <input type="text" name="width" value="" style="width:5em">
+							　高さ(px) <input type="text" name="height" value="" style="width:5em">
+						</li>
+						<li>
+							背景色 <input type="color" name="bgcolor" value="#000000" style="width:6em">
+							<label><input type="checkbox" name="transparent" value="1"> 透明 </label>
+						</li>
+						<li>
+							変数(object) <textarea name="FlashVars" style="width:16em">{}</textarea>
+						</li>
+					</ul>
+				</div>
+				<div id="disp0">
+				</div>
+
+				<h2>注意事項</h2>
+				<ul>
+					<li><a href="https://github.com/swf2js/swf2js">swf2js</a>(version 0.7.8)というもので変換しています。</li>
+					<li>うまく変換できず、表示や動作がおかしくなる場合も多いです。</li>
+					<li>読込みに時間がかかるものや、場合によってはブラウザが固まることもあります。</li>
+					<li>ActionScript3.0 は非対応(多分)です。</li>
+					<li>複数回の読込みで画面が重くなる場合はページの再読込をしてください。</li>
+					<li>表示中にウィンドウサイズを変更した場合、表示してないタブで再生中のFlashが見えなくなります。タブを表示している状態でもう一度ウィンドウをリサイズしてください。</li>
+				</ul>
+
+				<h2>更新日</h2>
+				<ul>
+					<li>2022-01-01 このページを作成</li>
+				</ul>
+
+				<h2>書いた人</h2>
+				<p>
+					Ezp!<br>
+					<a href="http://ezp.s17.xrea.com">Gharacter Junktion</a> というサイトでモバイルフラッシュを作って置いてました。(いまはもううごかない)<br>
+					たまに <a href="https://twitter.com/Gharacter">Twitter</a> でなにかしゃべる。
+				</p>
+			</div>
+		</div>
+		<div class="page" id="disp1">
+		</div>
+	</div>
+	<div id="btm">
+	</div>
+</div>
+</body>
+</html>
